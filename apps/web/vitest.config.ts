@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
+import vueJsx from "@vitejs/plugin-vue-jsx";
 
 export default defineConfig({
+  plugins: [vueJsx()],
   test: {
     environment: "jsdom",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
