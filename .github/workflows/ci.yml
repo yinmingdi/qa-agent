@@ -46,7 +46,13 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        shell: bash
+        run: |
+          if [ ! -f pnpm-lock.yaml ]; then
+            echo "::error::pnpm-lock.yaml is missing. Commit the lockfile (and ensure it's not ignored) to enable reproducible CI installs."
+            exit 1
+          fi
+          pnpm install --frozen-lockfile
 
       - name: Lint
         run: pnpm -r lint
