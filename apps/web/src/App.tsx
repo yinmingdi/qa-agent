@@ -7,6 +7,30 @@ type Message = {
   meta?: string;
 };
 
+type SseMetaEvent = {
+  event: "meta";
+  sessionId?: string | null;
+  category?: string;
+  route?: string;
+};
+
+type SseChunkEvent = {
+  event: "chunk";
+  text?: string;
+};
+
+type SseDoneEvent = {
+  event: "done";
+};
+
+type SseEvent = SseMetaEvent | SseChunkEvent | SseDoneEvent;
+
+function isSseEvent(value: unknown): value is SseEvent {
+  if (typeof value !== "object" || value == null) return false;
+  const v = value as Record<string, unknown>;
+  return v.event === "meta" || v.event === "chunk" || v.event === "done";
+}
+
 const SESSION_STORAGE_KEY = "faq_session_id";
 
 function getInitialSessionId(): string | null {
@@ -82,7 +106,7 @@ export default defineComponent(() => {
       let route: string | undefined;
       let fullAnswer = "";
 
-      while (true) {
+      for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
@@ -92,11 +116,13 @@ export default defineComponent(() => {
           const dataLine = line.trim().replace(/^data:\s*/, "");
           if (!dataLine) continue;
           try {
-            const data = JSON.parse(dataLine);
-            if (data.event === "meta") {
-              sessionIdFromStream = data.sessionId ?? null;
-              category = data.category;
-              route = data.route;
+            const parsed: unknown = JSON.parse(dataLine);
+            if (!isSseEvent(parsed)) continue;
+
+            if (parsed.event === "meta") {
+              sessionIdFromStream = parsed.sessionId ?? null;
+              category = parsed.category;
+              route = parsed.route;
               meta =
                 category === "billing"
                   ? "（路由到：账单/支付 Agent）"
@@ -107,17 +133,17 @@ export default defineComponent(() => {
                   : route === "handoff"
                   ? "（Router 决策：转人工/兜底 Agent）"
                   : "（Router 决策：其他 FAQ Agent）";
-            } else if (data.event === "chunk" && data.text) {
-              fullAnswer += data.text;
+            } else if (parsed.event === "chunk" && parsed.text) {
+              fullAnswer += parsed.text;
               const msg = messages.value.find((m) => m.id === botMessageId);
               if (msg) {
                 msg.text = fullAnswer;
                 msg.meta = meta;
               }
-            } else if (data.event === "done") {
+            } else if (parsed.event === "done") {
               // 流结束，最终文案已在上面更新
             }
-          } catch (_) {
+          } catch {
             // 忽略单条解析失败
           }
         }
@@ -148,7 +174,7 @@ export default defineComponent(() => {
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      send();
+      void send();
     }
   };
 
@@ -321,7 +347,7 @@ export default defineComponent(() => {
             }}
           />
           <button
-            onClick={send}
+            onClick={() => void send()}
             disabled={loading.value || !input.value.trim()}
             style={{
               borderRadius: "999px",
