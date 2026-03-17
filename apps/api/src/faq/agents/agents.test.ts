@@ -52,7 +52,7 @@ describe("classifierAgent", () => {
 });
 
 describe("fallbackAgent", () => {
-  it("returns a stable handoff answer", async () => {
+  it("returns a stable handoff answer", () => {
     const out = fallbackAgent(baseState("???"));
     expect(out.answer).toContain("转人工");
   });
