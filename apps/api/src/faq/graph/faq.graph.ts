@@ -68,7 +68,7 @@ export function createFaqGraph() {
 
   async function run(question: string, history: ConversationTurn[]): Promise<FaqState> {
     const state = buildInitialState(question, history);
-    const result = (await app.invoke(state as any)) as FaqState;
+    const result = (await app.invoke(state)) as FaqState;
     return result;
   }
 

@@ -18,7 +18,8 @@ export class FaqController {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no");
-    (res as any).flushHeaders?.();
+    const flushHeaders = (res as Response & { flushHeaders?: () => void }).flushHeaders;
+    if (typeof flushHeaders === "function") flushHeaders();
 
     res.write(
       `data: ${JSON.stringify({

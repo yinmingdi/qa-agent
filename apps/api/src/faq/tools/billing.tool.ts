@@ -1,7 +1,7 @@
 import type { FaqState, BillingInfo } from "../state/faq.types";
 import { extractPossibleOrderId } from "./common.tool";
 
-export async function billingTool(state: FaqState): Promise<FaqState> {
+export function billingTool(state: FaqState): FaqState {
   const orderId = extractPossibleOrderId(state.question);
   const info: BillingInfo = {
     orderId,

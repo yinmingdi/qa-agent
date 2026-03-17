@@ -14,5 +14,5 @@ async function bootstrap() {
   console.log(`Nest API server listening on http://localhost:${port}`);
 }
 
-bootstrap();
+void bootstrap();
 

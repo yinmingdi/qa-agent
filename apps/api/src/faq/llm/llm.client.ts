@@ -34,7 +34,14 @@ export async function callLlmAsText(systemPrompt: string, userContent: string): 
 
   if (Array.isArray(content)) {
     return content
-      .map((c: any) => (typeof c?.text === "string" ? c.text : ""))
+      .map((c: unknown) => {
+        if (typeof c === "string") return c;
+        if (typeof c === "object" && c != null) {
+          const maybeText = (c as Record<string, unknown>).text;
+          if (typeof maybeText === "string") return maybeText;
+        }
+        return "";
+      })
       .join("\n")
       .trim();
   }

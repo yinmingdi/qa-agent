@@ -1,6 +1,6 @@
 import type { FaqState, TechnicalContext } from "../state/faq.types";
 
-export async function technicalTool(state: FaqState): Promise<FaqState> {
+export function technicalTool(state: FaqState): FaqState {
   const q = state.question.toLowerCase();
   let platform: TechnicalContext["platform"] = "unknown";
   if (q.includes("安卓") || q.includes("android")) platform = "android";

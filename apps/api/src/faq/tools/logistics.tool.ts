@@ -1,7 +1,7 @@
 import type { FaqState, LogisticsInfo } from "../state/faq.types";
 import { extractPossibleOrderId } from "./common.tool";
 
-export async function logisticsTool(state: FaqState): Promise<FaqState> {
+export function logisticsTool(state: FaqState): FaqState {
   const orderId = extractPossibleOrderId(state.question);
   const info: LogisticsInfo = {
     orderId,
