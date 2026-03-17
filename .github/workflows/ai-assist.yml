@@ -63,7 +63,7 @@ jobs:
             DIFF=$(git diff HEAD~1 HEAD --no-color 2>/dev/null || echo "(no diff)")
           fi
           echo "${DIFF::120000}" > diff.txt
-          SNIPPET=$(head -c 6000 diff.txt | sed 's/"/\\"/g')
+          SNIPPET=$(head -c 500 diff.txt | tr '\n' ' ' | sed 's/"/\\"/g')
           echo "diff_snippet=$SNIPPET" >> "$GITHUB_OUTPUT"
 
       - name: Call LLM - 可行性分析
@@ -138,7 +138,7 @@ jobs:
           fi
           echo "${DIFF::120000}" > diff.txt
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
-          SNIPPET=$(head -c 6000 diff.txt | sed 's/"/\\"/g')
+          SNIPPET=$(head -c 500 diff.txt | tr '\n' ' ' | sed 's/"/\\"/g')
           echo "diff_snippet=$SNIPPET" >> "$GITHUB_OUTPUT"
 
       - name: Call LLM - 单测建议
