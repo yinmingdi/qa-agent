@@ -72,9 +72,11 @@ jobs:
         with:
           url: ${{ env.LLM_API_URL }}/chat/completions
           method: 'POST'
-          customHeaders: |
-            Authorization: Bearer ${{ secrets.LLM_API_KEY }}
-            Content-Type: application/json
+          customHeaders: >
+            {
+              "Authorization": "Bearer ${{ secrets.LLM_API_KEY }}",
+              "Content-Type": "application/json"
+            }
           data: >
             {
               "model": "${{ env.LLM_MODEL }}",
@@ -147,9 +149,11 @@ jobs:
         with:
           url: ${{ env.LLM_API_URL }}/chat/completions
           method: 'POST'
-          customHeaders: |
-            Authorization: Bearer ${{ secrets.LLM_API_KEY }}
-            Content-Type: application/json
+          customHeaders: >
+            {
+              "Authorization": "Bearer ${{ secrets.LLM_API_KEY }}",
+              "Content-Type": "application/json"
+            }
           data: >
             {
               "model": "${{ env.LLM_MODEL }}",
@@ -218,9 +222,11 @@ jobs:
         with:
           url: ${{ env.LLM_API_URL }}/chat/completions
           method: 'POST'
-          customHeaders: |
-            Authorization: Bearer ${{ secrets.LLM_API_KEY }}
-            Content-Type: application/json
+          customHeaders: >
+            {
+              "Authorization": "Bearer ${{ secrets.LLM_API_KEY }}",
+              "Content-Type": "application/json"
+            }
           data: >
             {
               "model": "${{ env.LLM_MODEL }}",
