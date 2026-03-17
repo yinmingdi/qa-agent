@@ -1,0 +1,266 @@
+# AI 辅助：需求/风险分析、单测建议、CI 优化建议（仅评论，不阻断流水线）
+name: AI Assist
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Run which job (feasibility | testgen | optimize)"
+        required: true
+        default: feasibility
+        type: choice
+        options:
+          - feasibility
+          - testgen
+          - optimize
+      pr_number:
+        description: "PR number (for manual run, post comment here)"
+        required: false
+        type: string
+
+concurrency:
+  group: ai-assist-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  LLM_API_URL: ${{ secrets.LLM_API_URL || 'https://api.laozhang.ai/v1' }}
+  LLM_MODEL: ${{ secrets.LLM_MODEL || 'gpt-4o-mini' }}
+
+jobs:
+  feasibility:
+    name: 可行性/风险分析
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >
+      (github.event_name == 'pull_request' && github.event.action != 'labeled') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'feasibility')
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_REF="${{ github.event.pull_request.base.ref }}"
+            git fetch origin "$BASE_REF"
+            MERGE_BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+            DIFF=$(git diff "$MERGE_BASE"...HEAD --no-color 2>/dev/null || git diff HEAD~1 HEAD --no-color)
+          else
+            DIFF=$(git diff HEAD~1 HEAD --no-color 2>/dev/null || echo "(no diff)")
+          fi
+          echo "${DIFF::120000}" > diff.txt
+          SNIPPET=$(head -c 500 diff.txt | tr '\n' ' ' | sed 's/"/\\"/g')
+          echo "diff_snippet=$SNIPPET" >> "$GITHUB_OUTPUT"
+
+      - name: Call LLM - 可行性分析
+        id: llm
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: ${{ env.LLM_API_URL }}/chat/completions
+          method: 'POST'
+          customHeaders: >
+            {
+              "Authorization": "Bearer ${{ secrets.LLM_API_KEY }}",
+              "Content-Type": "application/json"
+            }
+          data: >
+            {
+              "model": "${{ env.LLM_MODEL }}",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "你是一个代码评审助手。根据 PR 的代码变更，用中文给出简明分析，严格按以下 Markdown 结构回复，不要跑题：\\n## 变更摘要\\n## 潜在风险与影响面\\n## 测试建议\\n## 回滚/兼容性注意点"
+                },
+                {
+                  "role": "user",
+                  "content": "仓库: ${{ github.repository }}，分支: ${{ github.head_ref || 'N/A' }}。请基于以下 diff 分析：```\\n${{ steps.diff.outputs.diff_snippet }}\\n```"
+                }
+              ],
+              "max_tokens": 1200
+            }
+          timeout: 90000
+
+      - name: Build comment body (可行性)
+        run: |
+          CONTENT=$(echo '${{ steps.llm.outputs.response }}' | jq -r '.choices[0].message.content // "(LLM 调用失败或响应异常)"')
+          echo "<!-- ai-assist-feasibility -->" > body.txt
+          echo "" >> body.txt
+          echo "$CONTENT" >> body.txt
+
+      - name: Post PR comment (可行性)
+        if: github.event.pull_request.number != '' || github.event.inputs.pr_number != ''
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          issue-number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          body-path: body.txt
+          edit-mode: replace
+
+  testgen:
+    name: 单测建议
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >
+      (github.event_name == 'pull_request' && github.event.label.name == 'ai:tests') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'testgen')
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff and file list
+        id: diff
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_REF="${{ github.event.pull_request.base.ref }}"
+            git fetch origin "$BASE_REF"
+            MERGE_BASE=$(git merge-base "origin/$BASE_REF" HEAD)
+            DIFF=$(git diff "$MERGE_BASE"...HEAD --no-color 2>/dev/null || git diff HEAD~1 HEAD --no-color)
+            FILES=$(git diff --name-only "$MERGE_BASE"...HEAD 2>/dev/null | tr '\n' ' ')
+          else
+            DIFF=$(git diff HEAD~1 HEAD --no-color 2>/dev/null || echo "(no diff)")
+            FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | tr '\n' ' ')
+          fi
+          echo "${DIFF::120000}" > diff.txt
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+          SNIPPET=$(head -c 500 diff.txt | tr '\n' ' ' | sed 's/"/\\"/g')
+          echo "diff_snippet=$SNIPPET" >> "$GITHUB_OUTPUT"
+
+      - name: Call LLM - 单测建议
+        id: llm
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: ${{ env.LLM_API_URL }}/chat/completions
+          method: 'POST'
+          customHeaders: >
+            {
+              "Authorization": "Bearer ${{ secrets.LLM_API_KEY }}",
+              "Content-Type": "application/json"
+            }
+          data: >
+            {
+              "model": "${{ env.LLM_MODEL }}",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "你是单元测试助手。仓库为 pnpm monorepo：apps/api 用 Vitest，apps/web 用 Vitest + Vue JSX。只针对本次 PR 修改的源码文件，给出可运行的单元测试建议（Vitest，需 mock 外部依赖如 LLM/网络）。只输出测试代码或补丁，用 Markdown 代码块包裹，不要改业务代码。"
+                },
+                {
+                  "role": "user",
+                  "content": "本次变更涉及文件: ${{ steps.diff.outputs.files }}。Diff 如下，请据此生成测试建议：```\\n${{ steps.diff.outputs.diff_snippet }}\\n```"
+                }
+              ],
+              "max_tokens": 1600
+            }
+          timeout: 90000
+
+      - name: Build comment body (单测建议)
+        run: |
+          CONTENT=$(echo '${{ steps.llm.outputs.response }}' | jq -r '.choices[0].message.content // "(LLM 调用失败或响应异常)"')
+          echo "<!-- ai-assist-testgen -->" > body.txt
+          echo "" >> body.txt
+          echo "$CONTENT" >> body.txt
+
+      - name: Post PR comment (单测建议)
+        if: github.event.pull_request.number != '' || github.event.inputs.pr_number != ''
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          issue-number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          body-path: body.txt
+          edit-mode: replace
+
+  optimize:
+    name: CI 优化建议
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    if: >
+      github.event_name == 'workflow_run' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'optimize')
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get CI run timing
+        id: timing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            RUN_ID="${{ github.event.workflow_run.id }}"
+          else
+            RUN_ID=$(gh run list --workflow=ci.yml --limit 1 --json databaseId -q '.[0].databaseId' 2>/dev/null || echo "")
+          fi
+          if [[ -n "$RUN_ID" ]]; then
+            gh run view "$RUN_ID" --json jobs -q '.jobs[] | "\(.name): \(.steps | map(.name + " " + (.completedAt // .startedAt // "?")) | join("; "))"' 2>/dev/null > timing.txt || echo "无法获取 run 详情" > timing.txt
+          else
+            echo "无可用 CI 运行记录" > timing.txt
+          fi
+
+      - name: Call LLM - CI 优化建议
+        id: llm
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: ${{ env.LLM_API_URL }}/chat/completions
+          method: 'POST'
+          customHeaders: >
+            {
+              "Authorization": "Bearer ${{ secrets.LLM_API_KEY }}",
+              "Content-Type": "application/json"
+            }
+          data: >
+            {
+              "model": "${{ env.LLM_MODEL }}",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "你是 CI/CD 优化顾问。根据给出的 CI 运行信息，用中文给出：1) 各步骤耗时占比 2) 可优化点（缓存、并行、拆分 job）3) 具体可执行建议。用 Markdown 格式，简明扼要。"
+                },
+                {
+                  "role": "user",
+                  "content": "CI 运行信息：```\\n$(cat timing.txt)\\n```"
+                }
+              ],
+              "max_tokens": 800
+            }
+          timeout: 60000
+
+      - name: Build comment body (CI 优化)
+        run: |
+          CONTENT=$(echo '${{ steps.llm.outputs.response }}' | jq -r '.choices[0].message.content // "(LLM 调用失败或响应异常)"')
+          echo "<!-- ai-assist-optimize -->" > body.txt
+          echo "" >> body.txt
+          echo "$CONTENT" >> body.txt
+
+      - name: Post to PR or Summary
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_MANUAL: ${{ github.event.inputs.pr_number }}
+          PR_FROM_RUN: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: |
+          PR_NUM="${PR_MANUAL:-${PR_FROM_RUN}}"
+          if [[ -n "$PR_NUM" ]]; then
+            gh pr comment "$PR_NUM" --body-file body.txt
+          else
+            echo "## CI 优化建议" >> "$GITHUB_STEP_SUMMARY"
+            tail -n +3 body.txt >> "$GITHUB_STEP_SUMMARY"
+          fi
