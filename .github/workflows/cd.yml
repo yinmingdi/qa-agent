@@ -1,0 +1,70 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types:
+      - completed
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build + Deploy (optional hooks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9.0.0"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -r build
+
+      # Best-practice: deployment should be environment-protected.
+      # You can also split into separate jobs for web/api with different environments.
+      - name: Deploy API via webhook (optional)
+        if: ${{ secrets.DEPLOY_HOOK_API != '' }}
+        env:
+          DEPLOY_HOOK_API: ${{ secrets.DEPLOY_HOOK_API }}
+        run: |
+          curl -fsSL -X POST "$DEPLOY_HOOK_API"
+
+      - name: Deploy Web via webhook (optional)
+        if: ${{ secrets.DEPLOY_HOOK_WEB != '' }}
+        env:
+          DEPLOY_HOOK_WEB: ${{ secrets.DEPLOY_HOOK_WEB }}
+        run: |
+          curl -fsSL -X POST "$DEPLOY_HOOK_WEB"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-${{ github.sha }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            apps/api/dist
+            apps/web/dist
