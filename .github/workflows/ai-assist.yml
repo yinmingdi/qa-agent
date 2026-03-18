@@ -51,16 +51,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
+      - name: Get PR diff (apps/api + apps/web)
         id: diff
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             BASE_REF="${{ github.event.pull_request.base.ref }}"
             git fetch origin "$BASE_REF"
-            MERGE_BASE=$(git merge-base "origin/$BASE_REF" HEAD)
-            DIFF=$(git diff "$MERGE_BASE"...HEAD --no-color 2>/dev/null || git diff HEAD~1 HEAD --no-color)
+            MERGE_BASE=$(git merge-base "origin/$BASE_REF" HEAD || echo "origin/$BASE_REF")
+            DIFF=$(git diff "$MERGE_BASE"...HEAD --no-color -- apps/api apps/web 2>/dev/null || git diff HEAD~1 HEAD --no-color -- apps/api apps/web)
           else
-            DIFF=$(git diff HEAD~1 HEAD --no-color 2>/dev/null || echo "(no diff)")
+            DIFF=$(git diff HEAD~1 HEAD --no-color -- apps/api apps/web 2>/dev/null || echo "(no diff)")
           fi
           echo "${DIFF::120000}" > diff.txt
           SNIPPET=$(head -c 500 diff.txt | tr '\n' ' ' | sed 's/"/\\"/g')
@@ -83,7 +83,7 @@ jobs:
               "messages": [
                 {
                   "role": "system",
-                  "content": "你是一个代码评审助手。根据 PR 的代码变更，用中文给出简明分析，严格按以下 Markdown 结构回复，不要跑题：\\n## 变更摘要\\n## 潜在风险与影响面\\n## 测试建议\\n## 回滚/兼容性注意点"
+                  "content": "你是一个代码评审助手。根据 PR 的代码变更（仅限 apps/api 与 apps/web 目录），用中文给出简明分析，严格按以下 Markdown 结构回复：\\n## 变更摘要\\n- ...\\n## 潜在风险与影响面\\n- ...\\n## 测试建议\\n- ...\\n## 回滚/兼容性注意点\\n- ...。每个小节使用若干 bullet 说明，不要输出与代码无关的内容。"
                 },
                 {
                   "role": "user",
@@ -125,18 +125,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR diff and file list
+      - name: Get PR diff and file list (apps/api + apps/web)
         id: diff
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             BASE_REF="${{ github.event.pull_request.base.ref }}"
             git fetch origin "$BASE_REF"
-            MERGE_BASE=$(git merge-base "origin/$BASE_REF" HEAD)
-            DIFF=$(git diff "$MERGE_BASE"...HEAD --no-color 2>/dev/null || git diff HEAD~1 HEAD --no-color)
-            FILES=$(git diff --name-only "$MERGE_BASE"...HEAD 2>/dev/null | tr '\n' ' ')
+            MERGE_BASE=$(git merge-base "origin/$BASE_REF" HEAD || echo "origin/$BASE_REF")
+            DIFF=$(git diff "$MERGE_BASE"...HEAD --no-color -- apps/api apps/web 2>/dev/null || git diff HEAD~1 HEAD --no-color -- apps/api apps/web)
+            FILES=$(git diff --name-only "$MERGE_BASE"...HEAD -- apps/api apps/web 2>/dev/null | tr '\n' ' ')
           else
-            DIFF=$(git diff HEAD~1 HEAD --no-color 2>/dev/null || echo "(no diff)")
-            FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | tr '\n' ' ')
+            DIFF=$(git diff HEAD~1 HEAD --no-color -- apps/api apps/web 2>/dev/null || echo "(no diff)")
+            FILES=$(git diff --name-only HEAD~1 HEAD -- apps/api apps/web 2>/dev/null | tr '\n' ' ')
           fi
           echo "${DIFF::120000}" > diff.txt
           echo "files=$FILES" >> "$GITHUB_OUTPUT"
@@ -160,7 +160,7 @@ jobs:
               "messages": [
                 {
                   "role": "system",
-                  "content": "你是单元测试助手。仓库为 pnpm monorepo：apps/api 用 Vitest，apps/web 用 Vitest + Vue JSX。只针对本次 PR 修改的源码文件，给出可运行的单元测试建议（Vitest，需 mock 外部依赖如 LLM/网络）。只输出测试代码或补丁，用 Markdown 代码块包裹，不要改业务代码。"
+                  "content": "你是单元测试助手。仓库为 pnpm monorepo：apps/api 用 Vitest（Node 环境），apps/web 用 Vitest + Vue JSX（jsdom 环境）。只针对本次 PR 修改的源码文件，给出可运行的单元测试建议（Vitest，需 mock 外部依赖如 LLM/网络）。输出结构：\\n## 测试用例列表\\n- 文件 A: 用例说明...\\n## 建议的测试代码片段\\n用 Markdown 代码块包裹 Vitest 示例，不要改业务代码。"
                 },
                 {
                   "role": "user",
