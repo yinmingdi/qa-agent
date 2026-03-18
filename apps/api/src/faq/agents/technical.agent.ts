@@ -3,12 +3,20 @@ import { buildHistoryContext, callLlmAsText } from "../llm/llm.client.js";
 
 export async function technicalAgent(state: FaqState): Promise<FaqState> {
   const historyText = buildHistoryContext(state.history);
+
+  const { technicalContext } = state;
   const toolSummary =
-    state.technicalContext != null
-      ? `\n\n【技术上下文工具数据】\n平台: ${
-          state.technicalContext.platform ?? "unknown"
-        }\n最近操作: ${state.technicalContext.lastAction ?? "未知"}\n建议步骤:\n- ${state.technicalContext
-          .suggestionSteps.join("\n- ")}\n`
+    technicalContext != null
+      ? [
+          "",
+          "",
+          "【技术上下文工具数据】",
+          `平台: ${technicalContext.platform ?? "unknown"}`,
+          `最近操作: ${technicalContext.lastAction ?? "未知"}`,
+          "建议步骤:",
+          ...technicalContext.suggestionSteps.map((step) => `- ${step}`),
+          "",
+        ].join("\n")
       : "\n\n【技术上下文工具数据】当前没有可用数据。\n";
 
   const answer = await callLlmAsText(
