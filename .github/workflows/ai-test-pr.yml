@@ -1,0 +1,127 @@
+name: AI Test PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "业务 PR 编号（例如 11）"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  LLM_API_URL: ${{ secrets.LLM_API_URL || 'https://api.openai.com/v1' }}
+  LLM_MODEL: ${{ secrets.LLM_MODEL || 'gpt-4o-mini' }}
+
+jobs:
+  ai_test_pr:
+    name: Generate tests PR from AI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch target PR branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_JSON=$(gh pr view ${{ github.event.inputs.pr_number }} --json headRefName,headRefOid,baseRefName)
+          echo "$PR_JSON"
+          HEAD_REF=$(echo "$PR_JSON" | jq -r '.headRefName')
+          BASE_REF=$(echo "$PR_JSON" | jq -r '.baseRefName')
+          HEAD_SHA=$(echo "$PR_JSON" | jq -r '.headRefOid')
+
+          echo "head_ref=$HEAD_REF" >> $GITHUB_OUTPUT
+          echo "base_ref=$BASE_REF" >> $GITHUB_OUTPUT
+          echo "head_sha=$HEAD_SHA" >> $GITHUB_OUTPUT
+
+          git fetch origin "$HEAD_REF"
+          git checkout "origin/$HEAD_REF"
+
+      - name: Get diff for tests generation (apps/api + apps/web)
+        id: diff
+        run: |
+          BASE="${{ steps.pr.outputs.base_ref }}"
+          git fetch origin "$BASE"
+          MERGE_BASE=$(git merge-base "origin/$BASE" HEAD || echo "origin/$BASE")
+          DIFF=$(git diff "$MERGE_BASE"...HEAD --no-color -- apps/api apps/web 2>/dev/null || git diff HEAD~1 HEAD --no-color -- apps/api apps/web)
+          echo "${DIFF::8000}" > diff.txt
+          SNIPPET=$(head -c 2000 diff.txt | tr '\n' ' ' | sed 's/"/\\"/g')
+          echo "diff_snippet=$SNIPPET" >> "$GITHUB_OUTPUT"
+
+      - name: Call LLM for tests patch
+        id: llm
+        uses: fjogeleit/http-request-action@v1
+        with:
+          url: ${{ env.LLM_API_URL }}/chat/completions
+          method: 'POST'
+          customHeaders: >
+            {
+              "Authorization": "Bearer ${{ secrets.LLM_API_KEY }}",
+              "Content-Type": "application/json"
+            }
+          data: >
+            {
+              "model": "${{ env.LLM_MODEL }}",
+              "messages": [
+                {
+                  "role": "system",
+                  "content": "你是一个资深 TypeScript/Vitest 工程师。仓库结构：apps/api 使用 Vitest(Node)，apps/web 使用 Vitest+Vue JSX(jsdom)。现在需要你为本次 diff 中修改的文件生成测试补丁。请严格输出一个 unified diff patch，要求：\\n1）只新增或修改 *.test.ts / *.test.tsx 文件，不修改业务代码；\\n2）路径以仓库根目录为基准；\\n3）使用 Vitest API；\\n4）不要输出任何解释文字，只输出 patch。"
+                },
+                {
+                  "role": "user",
+                  "content": "下面是需要补测试的 diff 片段(已截断)：```\\n${{ steps.diff.outputs.diff_snippet }}\\n```"
+                }
+              ],
+              "max_tokens": 3000
+            }
+          timeout: 90000
+
+      - name: Save patch from LLM
+        run: |
+          echo '${{ steps.llm.outputs.response }}' | jq -r '.choices[0].message.content' > ai-tests.patch
+          echo "AI patch preview:"
+          head -n 40 ai-tests.patch || true
+
+      - name: Apply patch to new branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="ai-tests/pr-${{ github.event.inputs.pr_number }}-${{ steps.pr.outputs.head_sha }}"
+
+          git switch -c "$BRANCH"
+
+          # 只允许改 tests 相关文件，简单保护：如果 patch 中包含非 test 路径就失败
+          if grep -E '^(\+\+\+ |\-\-\- )' ai-tests.patch | grep -vE '(\.test\.tsx?|/__tests__/)' >/dev/null; then
+            echo "::error::AI 生成的 patch 试图修改非测试文件，已拒绝应用。"
+            exit 1
+          fi
+
+          if ! git apply --whitespace=fix ai-tests.patch; then
+            echo "::error::无法应用 AI 生成的 patch，请手动检查 ai-tests.patch。"
+            exit 1
+          fi
+
+          git status
+          if git diff --quiet; then
+            echo "No changes after applying patch, skip creating PR."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(tests): add AI-generated tests for PR #${{ github.event.inputs.pr_number }}"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --head "$BRANCH" \
+            --base "${{ steps.pr.outputs.base_ref }}" \
+            --title "chore(tests): AI tests for PR #${{ github.event.inputs.pr_number }}" \
+            --body "This PR contains **only AI-generated tests** for #${{ github.event.inputs.pr_number }}.\\n\\n请仔细 review，确认测试用例和断言是否合理后再合并。"
