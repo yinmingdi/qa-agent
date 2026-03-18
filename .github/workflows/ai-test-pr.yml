@@ -17,8 +17,8 @@ permissions:
   pull-requests: write
 
 env:
-  LLM_API_URL: ${{ vars.LLM_API_URL || 'https://api.openai.com/v1' }}
-  LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
+  LLM_API_URL: ${{ secrets.LLM_API_URL || 'https://api.openai.com/v1' }}
+  LLM_MODEL: ${{ secrets.LLM_MODEL || 'gpt-4o-mini' }}
 
 jobs:
   ai_test_pr:

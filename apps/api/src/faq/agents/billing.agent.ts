@@ -3,11 +3,24 @@ import { buildHistoryContext, callLlmAsText } from "../llm/llm.client.js";
 
 export async function billingAgent(state: FaqState): Promise<FaqState> {
   const historyText = buildHistoryContext(state.history);
+
+  const { billingInfo } = state;
   const toolSummary =
-    state.billingInfo != null
-      ? `\n\n【账单工具返回数据】\n订单号: ${state.billingInfo.orderId ?? "未知"}\n金额: ${
-          state.billingInfo.amount != null ? `${state.billingInfo.amount} ${state.billingInfo.currency ?? ""}` : "未知"
-        }\n状态: ${state.billingInfo.status}\n最后更新时间: ${state.billingInfo.lastUpdate}\n`
+    billingInfo != null
+      ? [
+          "",
+          "",
+          "【账单工具返回数据】",
+          `订单号: ${billingInfo.orderId ?? "未知"}`,
+          `金额: ${
+            billingInfo.amount != null
+              ? `${billingInfo.amount} ${billingInfo.currency ?? ""}`
+              : "未知"
+          }`,
+          `状态: ${billingInfo.status}`,
+          `最后更新时间: ${billingInfo.lastUpdate}`,
+          "",
+        ].join("\n")
       : "\n\n【账单工具返回数据】当前没有可用数据。\n";
 
   const answer = await callLlmAsText(
