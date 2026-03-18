@@ -29,8 +29,7 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       length(github.event.workflow_run.pull_requests) > 0)
+       github.event.workflow_run.conclusion == 'success')
     steps:
       - name: Resolve PR number and check label (workflow_run)
         id: resolve
