@@ -3,15 +3,22 @@ import { buildHistoryContext, callLlmAsText } from "../llm/llm.client.js";
 
 export async function logisticsAgent(state: FaqState): Promise<FaqState> {
   const historyText = buildHistoryContext(state.history);
+
+  const { logisticsInfo } = state;
   const toolSummary =
-    state.logisticsInfo != null
-      ? `\n\n【物流工具返回数据】\n订单号: ${state.logisticsInfo.orderId ?? "未知"}\n承运方: ${
-          state.logisticsInfo.carrier ?? "未知"
-        }\n运单号: ${state.logisticsInfo.trackingNumber ?? "未知"}\n物流状态: ${
-          state.logisticsInfo.status
-        }\n最后位置: ${state.logisticsInfo.lastLocation ?? "未知"}\n预计送达: ${
-          state.logisticsInfo.eta ?? "未知"
-        }\n`
+    logisticsInfo != null
+      ? [
+          "",
+          "",
+          "【物流工具返回数据】",
+          `订单号: ${logisticsInfo.orderId ?? "未知"}`,
+          `承运方: ${logisticsInfo.carrier ?? "未知"}`,
+          `运单号: ${logisticsInfo.trackingNumber ?? "未知"}`,
+          `物流状态: ${logisticsInfo.status}`,
+          `最后位置: ${logisticsInfo.lastLocation ?? "未知"}`,
+          `预计送达: ${logisticsInfo.eta ?? "未知"}`,
+          "",
+        ].join("\n")
       : "\n\n【物流工具返回数据】当前没有可用数据。\n";
 
   const answer = await callLlmAsText(
