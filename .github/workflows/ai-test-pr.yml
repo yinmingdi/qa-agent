@@ -17,8 +17,8 @@ permissions:
   pull-requests: write
 
 env:
-  LLM_API_URL: ${{ vars.LLM_API_URL || 'https://api.openai.com/v1' }}
-  LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
+  LLM_API_URL: ${{ secrets.LLM_API_URL || 'https://api.openai.com/v1' }}
+  LLM_MODEL: ${{ secrets.LLM_MODEL || 'gpt-4o-mini' }}
 
 jobs:
   ai_test_pr:
@@ -29,8 +29,7 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       length(github.event.workflow_run.pull_requests) > 0)
+       github.event.workflow_run.conclusion == 'success')
     steps:
       - name: Resolve PR number and check label (workflow_run)
         id: resolve
