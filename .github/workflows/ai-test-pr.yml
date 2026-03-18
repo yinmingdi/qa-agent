@@ -1,10 +1,14 @@
+# 方案三：CI 通过 + PR 带 ai:tests label 时自动生成测试 PR；也可手动 Run workflow 填 PR 号
 name: AI Test PR
 
 on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       pr_number:
-        description: "业务 PR 编号（例如 11）"
+        description: "业务 PR 编号（手动触发时必填）"
         required: true
         type: string
 
@@ -13,27 +17,54 @@ permissions:
   pull-requests: write
 
 env:
-  LLM_API_URL: ${{ secrets.LLM_API_URL || 'https://api.openai.com/v1' }}
-  LLM_MODEL: ${{ secrets.LLM_MODEL || 'gpt-4o-mini' }}
+  LLM_API_URL: ${{ vars.LLM_API_URL || 'https://api.openai.com/v1' }}
+  LLM_MODEL: ${{ vars.LLM_MODEL || 'gpt-4o-mini' }}
 
 jobs:
   ai_test_pr:
     name: Generate tests PR from AI
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # 手动触发时直接跑；workflow_run 时仅当 CI 成功且该 PR 带有 ai:tests label 才跑
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       length(github.event.workflow_run.pull_requests) > 0)
     steps:
+      - name: Resolve PR number and check label (workflow_run)
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            PR_NUM="${{ github.event.workflow_run.pull_requests[0].number }}"
+            if ! gh pr view "$PR_NUM" --json labels -q '.labels[].name' 2>/dev/null | grep -q '^ai:tests$'; then
+              echo "PR #$PR_NUM 未带 ai:tests label，跳过生成测试 PR"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            PR_NUM="${{ github.event.inputs.pr_number }}"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "pr_number=$PR_NUM" >> "$GITHUB_OUTPUT"
+
       - name: Checkout repo
+        if: steps.resolve.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Fetch target PR branch
+        if: steps.resolve.outputs.skip != 'true'
         id: pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_JSON=$(gh pr view ${{ github.event.inputs.pr_number }} --json headRefName,headRefOid,baseRefName)
-          echo "$PR_JSON"
+          PR_NUM="${{ steps.resolve.outputs.pr_number }}"
+          PR_JSON=$(gh pr view "$PR_NUM" --json headRefName,headRefOid,baseRefName)
           HEAD_REF=$(echo "$PR_JSON" | jq -r '.headRefName')
           BASE_REF=$(echo "$PR_JSON" | jq -r '.baseRefName')
           HEAD_SHA=$(echo "$PR_JSON" | jq -r '.headRefOid')
@@ -46,6 +77,7 @@ jobs:
           git checkout "origin/$HEAD_REF"
 
       - name: Get diff for tests generation (apps/api + apps/web)
+        if: steps.resolve.outputs.skip != 'true'
         id: diff
         run: |
           BASE="${{ steps.pr.outputs.base_ref }}"
@@ -55,8 +87,15 @@ jobs:
           echo "${DIFF::8000}" > diff.txt
           SNIPPET=$(head -c 2000 diff.txt | tr '\n' ' ' | sed 's/"/\\"/g')
           echo "diff_snippet=$SNIPPET" >> "$GITHUB_OUTPUT"
+          if [[ -z "${SNIPPET// }" ]]; then
+            echo "diff_empty=true" >> "$GITHUB_OUTPUT"
+            echo "apps/api 与 apps/web 无变更，跳过生成测试 PR"
+          else
+            echo "diff_empty=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Call LLM for tests patch
+        if: steps.resolve.outputs.skip != 'true' && steps.diff.outputs.diff_empty != 'true'
         id: llm
         uses: fjogeleit/http-request-action@v1
         with:
@@ -85,21 +124,26 @@ jobs:
           timeout: 90000
 
       - name: Save patch from LLM
+        if: steps.resolve.outputs.skip != 'true' && steps.diff.outputs.diff_empty != 'true'
         run: |
           echo '${{ steps.llm.outputs.response }}' | jq -r '.choices[0].message.content' > ai-tests.patch
           echo "AI patch preview:"
           head -n 40 ai-tests.patch || true
 
       - name: Apply patch to new branch
+        if: steps.resolve.outputs.skip != 'true' && steps.diff.outputs.diff_empty != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH="ai-tests/pr-${{ github.event.inputs.pr_number }}-${{ steps.pr.outputs.head_sha }}"
+          PR_NUM="${{ steps.resolve.outputs.pr_number }}"
+          HEAD_SHA="${{ steps.pr.outputs.head_sha }}"
+          BASE_REF="${{ steps.pr.outputs.base_ref }}"
+          BRANCH="ai-tests/pr-${PR_NUM}-${HEAD_SHA}"
 
           git switch -c "$BRANCH"
 
-          # 只允许改 tests 相关文件，简单保护：如果 patch 中包含非 test 路径就失败
-          if grep -E '^(\+\+\+ |\-\-\- )' ai-tests.patch | grep -vE '(\.test\.tsx?|/__tests__/)' >/dev/null; then
+          # 只允许改 tests 相关文件
+          if grep -E '^(\+\+\+ |\-\-\- )' ai-tests.patch 2>/dev/null | grep -vE '(\.test\.tsx?|/__tests__/)' >/dev/null; then
             echo "::error::AI 生成的 patch 试图修改非测试文件，已拒绝应用。"
             exit 1
           fi
@@ -117,11 +161,12 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore(tests): add AI-generated tests for PR #${{ github.event.inputs.pr_number }}"
+          git add -A
+          git commit -m "chore(tests): add AI-generated tests for PR #${PR_NUM}"
           git push origin "$BRANCH"
 
           gh pr create \
             --head "$BRANCH" \
-            --base "${{ steps.pr.outputs.base_ref }}" \
-            --title "chore(tests): AI tests for PR #${{ github.event.inputs.pr_number }}" \
-            --body "This PR contains **only AI-generated tests** for #${{ github.event.inputs.pr_number }}.\\n\\n请仔细 review，确认测试用例和断言是否合理后再合并。"
+            --base "$BASE_REF" \
+            --title "chore(tests): AI tests for PR #${PR_NUM}" \
+            --body "This PR contains **only AI-generated tests** for #${PR_NUM}.\\n\\n请仔细 review，确认测试用例和断言是否合理后再合并。"
