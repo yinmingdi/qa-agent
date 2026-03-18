@@ -38,8 +38,10 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             PR_NUM="${{ github.event.workflow_run.pull_requests[0].number }}"
-            if ! gh pr view "$PR_NUM" --json labels -q '.labels[].name' 2>/dev/null | grep -q '^ai:tests$'; then
-              echo "PR #$PR_NUM 未带 ai:tests label，跳过生成测试 PR"
+            LABELS=$(gh pr view "$PR_NUM" --json labels -q '.labels[].name' 2>/dev/null || echo "")
+            echo "Detected labels on PR #$PR_NUM: $LABELS"
+            if ! echo "$LABELS" | grep -qi 'ai:tests'; then
+              echo "PR #$PR_NUM 未带 ai:tests label（或名称大小写/空格不匹配），跳过生成测试 PR"
               echo "skip=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
