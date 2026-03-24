@@ -34,7 +34,7 @@ importers:
         version: 1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0)
       '@langchain/langgraph':
         specifier: ^1.2.2
-        version: 1.2.2(@langchain/core@1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0))(vue@3.5.30(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76)
+        version: 1.2.2(@langchain/core@1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0))(vue@3.5.30(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6)
       '@langchain/openai':
         specifier: ^0.0.20
         version: 0.0.20(ws@8.19.0)
@@ -63,8 +63,8 @@ importers:
         specifier: ^4.19.2
         version: 4.22.1
       zod:
-        specifier: ^3.23.8
-        version: 3.25.76
+        specifier: ^4.3.6
+        version: 4.3.6
     devDependencies:
       '@types/express':
         specifier: ^4.17.21
@@ -3508,6 +3508,9 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+
 snapshots:
 
   '@asamuzakjp/css-color@3.2.0':
@@ -4108,7 +4111,7 @@ snapshots:
       mustache: 4.2.0
       p-queue: 6.6.2
       uuid: 11.1.0
-      zod: 3.25.76
+      zod: 4.3.6
     transitivePeerDependencies:
       - '@opentelemetry/api'
       - '@opentelemetry/exporter-trace-otlp-proto'
@@ -4131,16 +4134,16 @@ snapshots:
       '@langchain/core': 1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0)
       vue: 3.5.30(typescript@5.9.3)
 
-  '@langchain/langgraph@1.2.2(@langchain/core@1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0))(vue@3.5.30(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@3.25.76))(zod@3.25.76)':
+  '@langchain/langgraph@1.2.2(@langchain/core@1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0))(vue@3.5.30(typescript@5.9.3))(zod-to-json-schema@3.25.1(zod@4.3.6))(zod@4.3.6)':
     dependencies:
       '@langchain/core': 1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0)
       '@langchain/langgraph-checkpoint': 1.0.0(@langchain/core@1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0))
       '@langchain/langgraph-sdk': 1.7.2(@langchain/core@1.1.32(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0))(vue@3.5.30(typescript@5.9.3))
       '@standard-schema/spec': 1.1.0
       uuid: 10.0.0
-      zod: 3.25.76
+      zod: 4.3.6
     optionalDependencies:
-      zod-to-json-schema: 3.25.1(zod@3.25.76)
+      zod-to-json-schema: 3.25.1(zod@4.3.6)
     transitivePeerDependencies:
       - '@angular/core'
       - react
@@ -4152,7 +4155,7 @@ snapshots:
     dependencies:
       '@langchain/core': 0.1.63(openai@4.104.0(ws@8.19.0)(zod@3.25.76))
       js-tiktoken: 1.0.21
-      openai: 4.104.0(ws@8.19.0)(zod@3.25.76)
+      openai: 4.104.0(ws@8.19.0)(zod@4.3.6)
       zod: 3.25.76
       zod-to-json-schema: 3.25.1(zod@3.25.76)
     transitivePeerDependencies:
@@ -5852,7 +5855,7 @@ snapshots:
       semver: 7.7.4
       uuid: 10.0.0
     optionalDependencies:
-      openai: 4.104.0(ws@8.19.0)(zod@3.25.76)
+      openai: 4.104.0(ws@8.19.0)(zod@4.3.6)
 
   langsmith@0.5.10(openai@4.104.0(ws@8.19.0)(zod@3.25.76))(ws@8.19.0):
     dependencies:
@@ -5863,7 +5866,7 @@ snapshots:
       semver: 7.7.4
       uuid: 10.0.0
     optionalDependencies:
-      openai: 4.104.0(ws@8.19.0)(zod@3.25.76)
+      openai: 4.104.0(ws@8.19.0)(zod@4.3.6)
       ws: 8.19.0
 
   levn@0.4.1:
@@ -6115,7 +6118,7 @@ snapshots:
     dependencies:
       mimic-function: 5.0.1
 
-  openai@4.104.0(ws@8.19.0)(zod@3.25.76):
+  openai@4.104.0(ws@8.19.0)(zod@4.3.6):
     dependencies:
       '@types/node': 18.19.130
       '@types/node-fetch': 2.6.13
@@ -6126,7 +6129,7 @@ snapshots:
       node-fetch: 2.7.0
     optionalDependencies:
       ws: 8.19.0
-      zod: 3.25.76
+      zod: 4.3.6
     transitivePeerDependencies:
       - encoding
 
@@ -6924,4 +6927,11 @@ snapshots:
     dependencies:
       zod: 3.25.76
 
+  zod-to-json-schema@3.25.1(zod@4.3.6):
+    dependencies:
+      zod: 4.3.6
+    optional: true
+
   zod@3.25.76: {}
+
+  zod@4.3.6: {}
